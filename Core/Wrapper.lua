@@ -7,7 +7,7 @@ local disabled = false
 local reentrant = false
 
 local function wrapped(slot, ...)
-    if reentrant or disabled then return original(slot, ...) end
+    if reentrant or disabled or ns.Loot.Bypassing() then return original(slot, ...) end
     local ok, refuses = pcall(Filter.RefusesSlot, slot)
     if not ok or not refuses then return original(slot, ...) end
     local itemID, link = Filter.SlotItem(slot)
@@ -18,9 +18,8 @@ end
 
 function Wrapper.Take(slot)
     reentrant = true
-    local ok, err = pcall(LootSlot, slot)
+    pcall(LootSlot, slot)
     reentrant = false
-    if not ok then error(err, 0) end
 end
 
 function Wrapper.Install()

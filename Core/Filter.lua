@@ -16,10 +16,6 @@ function Filter.SlotItem(slot)
     return tonumber(link:match("item:(%d+)")), link
 end
 
-function Filter.SlotItemID(slot)
-    return (Filter.SlotItem(slot))
-end
-
 function Filter.SlotCount()
     local ok, count = pcall(GetNumLootItems)
     if not ok then return 0 end
@@ -51,7 +47,7 @@ end
 function Filter.RefusesSlot(slot)
     if Storage.IsEmpty() then return false end
     if Filter.SparesSlot(slot) then return false end
-    local itemID = Filter.SlotItemID(slot)
+    local itemID = (Filter.SlotItem(slot))
     if not itemID then return false end
-    return Storage.IsBlacklisted(itemID)
+    return Filter.Refuses(itemID)
 end

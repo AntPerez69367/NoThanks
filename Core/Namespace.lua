@@ -26,6 +26,11 @@ function ns.Announce(message)
     ns.Print(message)
 end
 
+function ns.Resync()
+    ns.AutoLoot.Sync()
+    ns.Wrapper.Sync()
+end
+
 function ns.ItemInfo(itemID)
     local getter = (C_Item and C_Item.GetItemInfo) or GetItemInfo
     if type(getter) ~= "function" then return nil end

@@ -18,8 +18,9 @@ function AutoLoot.Owns()
 end
 
 function AutoLoot.Acquire()
-    if AutoLoot.Owns() then return end
-    Storage.account.heldAutoLoot = readCVar()
+    if not AutoLoot.Owns() then
+        Storage.account.heldAutoLoot = readCVar()
+    end
     writeCVar("0")
 end
 
@@ -36,7 +37,10 @@ end
 local explained = false
 
 local function reassert()
-    if not AutoLoot.Owns() or readCVar() == "0" then return end
+    if not AutoLoot.Owns() then return end
+    local current = readCVar()
+    if current == "0" then return end
+    Storage.account.heldAutoLoot = current
     writeCVar("0")
     if explained then return end
     explained = true
@@ -45,7 +49,14 @@ end
 
 function AutoLoot.Initialise()
     local frame = CreateFrame("Frame")
-    frame:SetScript("OnEvent", reassert)
+    frame:SetScript("OnEvent", function(_, event)
+        if event == "PLAYER_LOGOUT" then
+            AutoLoot.Release()
+        else
+            reassert()
+        end
+    end)
+    frame:RegisterEvent("PLAYER_LOGOUT")
     pcall(frame.RegisterEvent, frame, "CVAR_UPDATE")
 end
 

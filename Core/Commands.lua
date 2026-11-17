@@ -1,5 +1,5 @@
 local addonName, ns = ...
-local Storage, AutoLoot, Wrapper, Loot, UI = ns.Storage, ns.AutoLoot, ns.Wrapper, ns.Loot, ns.UI
+local Storage, AutoLoot, Loot, UI = ns.Storage, ns.AutoLoot, ns.Loot, ns.UI
 
 local function devCommand(argument)
     local verb, value = argument:match("^(%S*)%s*(%S*)$")
@@ -15,8 +15,7 @@ local function devCommand(argument)
     else
         ns.Print("no change for " .. tostring(itemID))
     end
-    AutoLoot.Sync()
-    Wrapper.Sync()
+    ns.Resync()
 end
 
 SLASH_NOTHANKS1, SLASH_NOTHANKS2, SLASH_NOTHANKS3 = "/nothanks", "/noty", "/nt"
@@ -45,6 +44,5 @@ bootstrap:SetScript("OnEvent", function(self, _, loaded)
     Loot.Initialise()
     AutoLoot.Initialise()
     UI.RegisterOptions()
-    AutoLoot.Sync()
-    Wrapper.Sync()
+    ns.Resync()
 end)

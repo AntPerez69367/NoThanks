@@ -170,16 +170,59 @@ function UI.Search(parent, width, placeholder, onChange)
     return box
 end
 
-function UI.Check(parent, label, getter, setter)
-    local check = CreateFrame("CheckButton", nil, parent, "UICheckButtonTemplate")
-    check:SetSize(24, 24)
-    local text = UI.Text(check, "GameFontHighlightSmall")
-    text:SetPoint("LEFT", check, "RIGHT", 2, 0)
-    text:SetText(label)
-    check.label = text
-    check:SetChecked(getter() and true or false)
-    check:SetScript("OnClick", function(self) setter(self:GetChecked() and true or false) end)
-    return check
+function UI.Segmented(parent, choices, segmentWidth, getter, setter, tooltip)
+    local group = CreateFrame("Frame", nil, parent)
+    group:SetHeight(20)
+    UI.Fill(group, UI.C.field)
+    UI.Edge(group, UI.C.borderDim)
+    local segments = {}
+    local function paint()
+        for _, segment in ipairs(segments) do
+            local on = getter() == segment.value
+            segment.wash:SetShown(on)
+            if on then
+                UI.Ink(segment.label, UI.C.white)
+            else
+                UI.Ink(segment.label, segment.hover and UI.C.text or UI.C.dim)
+            end
+        end
+    end
+    local x = 0
+    for index, choice in ipairs(choices) do
+        local segment = CreateFrame("Button", nil, group)
+        segment.value = choice.value
+        segment.label = UI.Text(segment, "GameFontNormalSmall")
+        segment.label:SetText(choice.label)
+        segment.label:SetWordWrap(false)
+        local width = segmentWidth or math.ceil(segment.label:GetStringWidth() + 18)
+        segment:SetSize(width, 18)
+        segment:SetPoint("TOPLEFT", group, "TOPLEFT", x, -1)
+        segment.label:SetPoint("CENTER")
+        x = x + width
+        segment.wash = segment:CreateTexture(nil, "ARTWORK")
+        segment.wash:SetAllPoints(segment)
+        segment.wash:SetColorTexture(UI.C.accent[1], UI.C.accent[2], UI.C.accent[3], 0.30)
+        segment:SetScript("OnClick", function(self)
+            setter(self.value)
+            paint()
+        end)
+        segment:SetScript("OnEnter", function(self)
+            self.hover = true
+            paint()
+            GameTooltip:SetOwner(self, "ANCHOR_TOP")
+            GameTooltip:SetText(tooltip)
+            GameTooltip:Show()
+        end)
+        segment:SetScript("OnLeave", function(self)
+            self.hover = false
+            paint()
+            if GameTooltip:IsOwned(self) then GameTooltip:Hide() end
+        end)
+        segments[index] = segment
+    end
+    group:SetWidth(x)
+    paint()
+    return group
 end
 
 function UI.Tab(parent, height, onClick)
@@ -204,7 +247,7 @@ function UI.Tab(parent, height, onClick)
     tab.SetLabel = function(text, active)
         tab.active = active
         tab.label:SetText(text)
-        tab:SetWidth(math.floor((tab.label:GetStringWidth() or 40) + 26))
+        tab:SetWidth(math.ceil(tab.label:GetStringWidth() + 26))
         tab.Apply()
     end
     tab:SetScript("OnEnter", function(self) self.hover = true; self.Apply() end)
@@ -391,34 +434,4 @@ function UI.Swatch(parent, quality, size, getter, onClick)
     end)
     button.Apply()
     return button
-end
-
-function UI.BindTooltip(frame, resolve)
-    frame:SetScript("OnEnter", function(self)
-        local link = resolve(self)
-        if not link then return end
-        GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-        GameTooltip:SetHyperlink(link)
-        GameTooltip:Show()
-    end)
-    frame:SetScript("OnLeave", function(self)
-        if GameTooltip:IsOwned(self) then GameTooltip:Hide() end
-    end)
-end
-
-function UI.Money(copper)
-    if type(copper) ~= "number" then return nil end
-    if copper <= 0 then return ns.L.NO_VALUE end
-    local coin = (C_CurrencyInfo and C_CurrencyInfo.GetCoinTextureString) or GetCoinTextureString
-    if type(coin) == "function" then
-        local ok, text = pcall(coin, copper)
-        if ok and text then return text end
-    end
-    if type(GetMoneyString) == "function" then
-        local ok, text = pcall(GetMoneyString, copper)
-        if ok and text then return text end
-    end
-    local gold = math.floor(copper / 10000)
-    local silver = math.floor((copper % 10000) / 100)
-    return string.format("%dg %ds %dc", gold, silver, copper % 100)
 end

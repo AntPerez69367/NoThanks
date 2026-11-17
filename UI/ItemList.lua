@@ -1,6 +1,6 @@
 local addonName, ns = ...
 local UI, Storage, Prices = ns.UI, ns.Storage, ns.Prices
-local AutoLoot, Wrapper, Filter = ns.AutoLoot, ns.Wrapper, ns.Filter
+local Filter = ns.Filter
 
 local ROW_HEIGHT = 22
 local VISIBLE_ROWS = 12
@@ -15,6 +15,7 @@ local MONEY_WIDTH = 92
 local GUTTER = 4
 local GUTTER_SPAN = 8
 local THUMB_MIN = 18
+local REFRESH_DELAY = 0.3
 
 local List = {}
 UI.List = List
@@ -25,12 +26,9 @@ local selected = {}
 local offset = 0
 local panel, headers, empty, track, thumb, rowWidth
 local currentTab = "loot"
-
-local function itemFacts(key)
-    local itemID = tonumber(key)
-    local name, link, quality, _, _, _, _, _, _, icon = ns.ItemInfo(itemID)
-    return itemID, name, link, quality, icon
-end
+local unfilteredTotal = 0
+local unresolved = false
+local refreshQueued = false
 
 local function columnSlots(container, nameFont, valueFont)
     local slots = {
@@ -75,8 +73,7 @@ local function quickToggle(key)
         Storage.Add(key)
     end
     List.ClearSelection()
-    AutoLoot.Sync()
-    Wrapper.Sync()
+    ns.Resync()
     UI.Refresh()
 end
 
@@ -148,8 +145,8 @@ local function updateRow(row, entry)
     columns.name:SetText(entry.name or ("item:" .. tostring(entry.key)))
     UI.Color(columns.name, entry.quality)
     columns.count:SetText(entry.count and tostring(entry.count) or "")
-    setMoney(columns.vendor, entry.vendor)
-    setMoney(columns.auction, entry.auction)
+    setMoney(columns.vendor, entry.itemID and Prices.Vendor(entry.itemID) or nil)
+    setMoney(columns.auction, entry.itemID and Prices.Auction(entry.itemID) or nil)
     if selected[entry.key] then
         row.fill:Show()
         row.accent:Show()
@@ -191,33 +188,44 @@ local function renderRows()
     paintGutter(total, maxOffset)
 end
 
-local function matches(entry, search, qualities)
+local function matches(key, name, quality, search, qualities)
     if search ~= "" then
-        if not entry.name then return false end
-        if not entry.name:lower():find(search, 1, true) then return false end
+        if name then
+            if not name:lower():find(search, 1, true) then return false end
+        elseif not tostring(key):find(search, 1, true) then
+            return false
+        end
     end
-    if entry.quality and next(qualities) and not qualities[entry.quality] then return false end
+    if quality and next(qualities) and not qualities[quality] then return false end
     return true
+end
+
+local function listed(key, itemID, blacklisted)
+    if blacklisted then return true end
+    return not (Storage.IsBlacklisted(key) or Filter.IsQuestItem(itemID))
 end
 
 function List.Build(tab, search, qualities)
     currentTab = tab
     entries = {}
+    unfilteredTotal = 0
+    unresolved = false
     search = (search or ""):lower()
     local blacklisted = (tab == "blacklist")
     local source = blacklisted and Storage.Blacklist() or Storage.History()
     for key, record in pairs(source) do
-        local itemID, name, link, quality, icon = itemFacts(key)
-        local hidden = not blacklisted and (Storage.IsBlacklisted(key) or Filter.IsQuestItem(itemID))
-        if not hidden then
-            local entry = {
-                key = key, itemID = itemID, name = name, link = link,
-                quality = quality, icon = icon, seen = record.seen or 0,
-                count = blacklisted and (record.skipped or 0) or record.count,
-                vendor = itemID and Prices.Vendor(itemID) or nil,
-                auction = itemID and Prices.Auction(itemID) or nil,
-            }
-            if matches(entry, search, qualities) then entries[#entries + 1] = entry end
+        local itemID = tonumber(key)
+        if listed(key, itemID, blacklisted) then
+            unfilteredTotal = unfilteredTotal + 1
+            local name, link, quality, _, _, _, _, _, _, icon = ns.ItemInfo(itemID)
+            if not name then unresolved = true end
+            if matches(key, name, quality, search, qualities) then
+                entries[#entries + 1] = {
+                    key = key, itemID = itemID, name = name, link = link,
+                    quality = quality, icon = icon, seen = record.seen or 0,
+                    count = blacklisted and (record.skipped or 0) or record.count,
+                }
+            end
         end
     end
     if blacklisted then
@@ -238,8 +246,19 @@ function List.ClearSelection()
     offset = 0
 end
 
-function List.Total()
-    return #entries
+
+function List.Counts()
+    return #entries, unfilteredTotal
+end
+
+function List.TabTotal(tab)
+    local blacklisted = (tab == "blacklist")
+    local source = blacklisted and Storage.Blacklist() or Storage.History()
+    local total = 0
+    for key in pairs(source) do
+        if listed(key, tonumber(key), blacklisted) then total = total + 1 end
+    end
+    return total
 end
 
 function List.Attach(parent, metrics)
@@ -250,6 +269,16 @@ function List.Attach(parent, metrics)
     panel:SetSize(metrics.listWidth, VISIBLE_ROWS * ROW_HEIGHT + 2)
     UI.Fill(panel, UI.C.content, 0.45)
     UI.Edge(panel, UI.C.borderDim)
+    panel:SetScript("OnShow", function(self) self:RegisterEvent("GET_ITEM_INFO_RECEIVED") end)
+    panel:SetScript("OnHide", function(self) self:UnregisterEvent("GET_ITEM_INFO_RECEIVED") end)
+    panel:SetScript("OnEvent", function()
+        if not unresolved or refreshQueued then return end
+        refreshQueued = true
+        C_Timer.After(REFRESH_DELAY, function()
+            refreshQueued = false
+            if panel:IsVisible() then UI.Refresh() end
+        end)
+    end)
     panel:EnableMouseWheel(true)
     panel:SetScript("OnMouseWheel", function(_, delta)
         offset = offset - delta

@@ -1,9 +1,13 @@
 local addonName, ns = ...
-local UI, Storage, AutoLoot, Wrapper = ns.UI, ns.Storage, ns.AutoLoot, ns.Wrapper
+local UI, Storage, Wrapper = ns.UI, ns.Storage, ns.Wrapper
 local Profiles = ns.Profiles
 
 local QUALITIES = { 0, 1, 2, 3, 4 }
-local MODIFIERS = { "SHIFT", "CTRL", "ALT" }
+local MODIFIERS = {
+    { value = "SHIFT", label = "SHIFT" },
+    { value = "CTRL", label = "CTRL" },
+    { value = "ALT", label = "ALT" },
+}
 local QUICKADDS = {
     { value = "SHIFT", label = "Shift" },
     { value = "CTRL", label = "Ctrl" },
@@ -42,6 +46,7 @@ local M = {
     scrollWidth = 482,
     labelWidth = 170,
     headingGap = 8,
+    collapsedGap = 6,
     actionTop = -392,
     actionH = 22,
     actionWidth = 200,
@@ -71,10 +76,6 @@ local transferGroup, transferBox, transferAccept, transferExport
 local profileRows = {}
 local syncProfiles
 
-local function text(key, fallback)
-    return ns.L[key] or fallback
-end
-
 local function trim(value)
     return value:match("^%s*(.-)%s*$")
 end
@@ -89,22 +90,10 @@ local function emptyMessage()
     return ns.L.EMPTY_LOOT
 end
 
-local function tabTotal(tab)
-    local count = 0
-    if tab == "blacklist" then
-        for _ in pairs(Storage.Blacklist()) do count = count + 1 end
-        return count
-    end
-    for key in pairs(Storage.History()) do
-        if not Storage.IsBlacklisted(key) then count = count + 1 end
-    end
-    return count
-end
-
-local function tabLabel(tab)
-    if tab == "options" then return text("TAB_OPTIONS", "Options") end
+local function tabLabel(tab, total)
+    if tab == "options" then return ns.L.TAB_OPTIONS end
     local name = (tab == "blacklist") and ns.L.TAB_BLACKLIST or ns.L.TAB_LOOT
-    return string.format("%s (%d)", name, tabTotal(tab))
+    return string.format("%s (%d)", name, total or UI.List.TabTotal(tab))
 end
 
 local function actionLabel(count)
@@ -129,18 +118,21 @@ end
 
 function UI.Refresh()
     local List = UI.List
-    for _, name in ipairs(TABS) do
-        tabs[name].SetLabel(tabLabel(name), name == currentTab)
-    end
     listPage:SetShown(currentTab ~= "options")
     optionsPage:SetShown(currentTab == "options")
+    local shown, total
+    if currentTab ~= "options" then
+        List.Build(currentTab, searchBox:GetText(), qualities)
+        shown, total = List.Counts()
+    end
+    for _, name in ipairs(TABS) do
+        tabs[name].SetLabel(tabLabel(name, name == currentTab and total or nil), name == currentTab)
+    end
     if currentTab == "options" then
         syncProfiles()
         reflowTabs()
         return
     end
-    List.Build(currentTab, searchBox:GetText(), qualities)
-    local shown, total = List.Total(), tabTotal(currentTab)
     local count = #List.Selected()
     bulkButton:SetText(actionLabel(count))
     bulkButton:SetEnabled(count > 0)
@@ -170,8 +162,7 @@ local function applyBulk()
         end
     end
     UI.List.ClearSelection()
-    AutoLoot.Sync()
-    Wrapper.Sync()
+    ns.Resync()
     UI.Refresh()
 end
 
@@ -252,7 +243,7 @@ local function buildToolbar(parent)
 
     local caption = UI.Text(group, "GameFontNormalSmall")
     caption:SetPoint("LEFT", group, "LEFT", 8, 0)
-    caption:SetText(text("FILTER_QUALITY", ns.L.QUALITY))
+    caption:SetText(ns.L.FILTER_QUALITY)
     caption:SetWordWrap(false)
     UI.Ink(caption, UI.C.muted)
 
@@ -270,7 +261,7 @@ local function buildToolbar(parent)
         swatches[#swatches + 1] = swatch
     end
 
-    local captionWidth = math.ceil(caption:GetStringWidth() or 44)
+    local captionWidth = math.ceil(caption:GetStringWidth())
     group:SetWidth(captionWidth + #QUALITIES * M.swatch
         + (#QUALITIES - 1) * M.swatchGap + 24)
     return toolbar
@@ -285,8 +276,8 @@ local function buildActions(parent)
     clearButton:SetPoint("LEFT", bulkButton, "RIGHT", 10, 0)
     clearButton.label = UI.Text(clearButton, "GameFontNormalSmall")
     clearButton.label:SetPoint("CENTER")
-    clearButton.label:SetText(text("CLEAR_SELECTION", "Clear selection"))
-    clearButton:SetWidth(math.floor((clearButton.label:GetStringWidth() or 90) + 16))
+    clearButton.label:SetText(ns.L.CLEAR_SELECTION)
+    clearButton:SetWidth(math.ceil(clearButton.label:GetStringWidth() + 16))
     UI.Ink(clearButton.label, UI.C.muted)
     clearButton:SetScript("OnEnter", function(self) UI.Ink(self.label, UI.C.accent) end)
     clearButton:SetScript("OnLeave", function(self) UI.Ink(self.label, UI.C.muted) end)
@@ -333,12 +324,14 @@ local function relayoutOptions()
         section.header:ClearAllPoints()
         section.header:SetPoint("TOPLEFT", optionsCanvas, "TOPLEFT", 12, y)
         section.header:SetPoint("TOPRIGHT", optionsCanvas, "TOPRIGHT", -12, y)
-        y = y - section.header:GetHeight() - M.headingGap
         for _, widget in ipairs(section.frames) do widget:SetShown(open) end
         if open then
+            y = y - section.header:GetHeight() - M.headingGap
             for _, place in ipairs(section.rows) do y = place(y) end
+            y = y - M.sectionGap
+        else
+            y = y - section.header:GetHeight() - M.collapsedGap
         end
-        y = y - M.sectionGap
     end
     optionsSpan = math.max(1, -y)
     optionsCanvas:SetHeight(optionsSpan)
@@ -373,7 +366,7 @@ local function addSetting(section, control, label, body)
         note:SetWordWrap(true)
         note:SetText(body)
         UI.Ink(note, UI.C.dim)
-        note.span = math.ceil(note:GetStringHeight() or 12) + 4
+        note.span = math.ceil(note:GetStringHeight()) + 4
         frames[#frames + 1] = note
     end
     frames[#frames + 1] = control
@@ -400,106 +393,6 @@ local function addRow(section, group, x)
     end
 end
 
-local function buildModifier(canvas)
-    local group = CreateFrame("Frame", nil, canvas)
-    group:SetSize(32 * #MODIFIERS, M.rowH)
-    UI.Fill(group, UI.C.field)
-    UI.Edge(group, UI.C.borderDim)
-    local segments = {}
-    local function paint()
-        for _, segment in ipairs(segments) do
-            local on = Storage.account.bypassModifier == segment.value
-            segment.wash:SetShown(on)
-            if on then
-                UI.Ink(segment.label, UI.C.white)
-            else
-                UI.Ink(segment.label, segment.hover and UI.C.text or UI.C.dim)
-            end
-        end
-    end
-    for index, value in ipairs(MODIFIERS) do
-        local segment = CreateFrame("Button", nil, group)
-        segment:SetSize(32, M.rowH - 2)
-        segment:SetPoint("TOPLEFT", group, "TOPLEFT", (index - 1) * 32, -1)
-        segment.value = value
-        segment.wash = segment:CreateTexture(nil, "ARTWORK")
-        segment.wash:SetAllPoints(segment)
-        segment.wash:SetColorTexture(UI.C.accent[1], UI.C.accent[2], UI.C.accent[3], 0.30)
-        segment.label = UI.Text(segment, "GameFontNormalSmall")
-        segment.label:SetPoint("CENTER")
-        segment.label:SetText(value)
-        segment:SetScript("OnClick", function(self)
-            Storage.account.bypassModifier = self.value
-            paint()
-        end)
-        segment:SetScript("OnEnter", function(self)
-            self.hover = true
-            paint()
-            GameTooltip:SetOwner(self, "ANCHOR_TOP")
-            GameTooltip:SetText(ns.L.SETTING_MODIFIER)
-            GameTooltip:Show()
-        end)
-        segment:SetScript("OnLeave", function(self)
-            self.hover = false
-            paint()
-            if GameTooltip:IsOwned(self) then GameTooltip:Hide() end
-        end)
-        segments[index] = segment
-    end
-    paint()
-    return group
-end
-
-local function buildQuickAdd(canvas)
-    local group = CreateFrame("Frame", nil, canvas)
-    group:SetSize(40 * #QUICKADDS, M.rowH)
-    UI.Fill(group, UI.C.field)
-    UI.Edge(group, UI.C.borderDim)
-    local segments = {}
-    local function paint()
-        for _, segment in ipairs(segments) do
-            local on = Storage.account.quickAddBinding == segment.value
-            segment.wash:SetShown(on)
-            if on then
-                UI.Ink(segment.label, UI.C.white)
-            else
-                UI.Ink(segment.label, segment.hover and UI.C.text or UI.C.dim)
-            end
-        end
-    end
-    for index, choice in ipairs(QUICKADDS) do
-        local segment = CreateFrame("Button", nil, group)
-        segment:SetSize(40, M.rowH - 2)
-        segment:SetPoint("TOPLEFT", group, "TOPLEFT", (index - 1) * 40, -1)
-        segment.value = choice.value
-        segment.wash = segment:CreateTexture(nil, "ARTWORK")
-        segment.wash:SetAllPoints(segment)
-        segment.wash:SetColorTexture(UI.C.accent[1], UI.C.accent[2], UI.C.accent[3], 0.30)
-        segment.label = UI.Text(segment, "GameFontNormalSmall")
-        segment.label:SetPoint("CENTER")
-        segment.label:SetText(choice.label)
-        segment:SetScript("OnClick", function(self)
-            Storage.account.quickAddBinding = self.value
-            paint()
-        end)
-        segment:SetScript("OnEnter", function(self)
-            self.hover = true
-            paint()
-            GameTooltip:SetOwner(self, "ANCHOR_TOP")
-            GameTooltip:SetText(ns.L.SETTING_QUICKADD)
-            GameTooltip:Show()
-        end)
-        segment:SetScript("OnLeave", function(self)
-            self.hover = false
-            paint()
-            if GameTooltip:IsOwned(self) then GameTooltip:Hide() end
-        end)
-        segments[index] = segment
-    end
-    paint()
-    return group
-end
-
 local function announceSample()
     local links = {}
     for key in pairs(Storage.Blacklist()) do
@@ -507,7 +400,7 @@ local function announceSample()
         if #links == 3 then break end
     end
     if #links == 0 then
-        return text("SETTING_ANNOUNCE_SAMPLE", "Tough Jerky, Chipped Claw, Ruined Pelt")
+        return ns.L.SETTING_ANNOUNCE_SAMPLE
     end
     return table.concat(links, ", ")
 end
@@ -515,67 +408,23 @@ end
 local function buildAnnounce(canvas)
     local row = CreateFrame("Frame", nil, canvas)
     row:SetHeight(M.rowH)
-    local group = CreateFrame("Frame", nil, row)
-    group:SetHeight(M.rowH)
-    group:SetPoint("TOPLEFT", row, "TOPLEFT", 0, 0)
-    UI.Fill(group, UI.C.field)
-    UI.Edge(group, UI.C.borderDim)
-    local segments = {}
     local test
-    local function paint()
-        for _, segment in ipairs(segments) do
-            local on = Storage.account.announce == segment.value
-            segment.wash:SetShown(on)
-            if on then
-                UI.Ink(segment.label, UI.C.white)
-            else
-                UI.Ink(segment.label, segment.hover and UI.C.text or UI.C.dim)
-            end
-        end
-        test:SetEnabled(Storage.account.announce ~= "NONE")
-    end
-    local x = 0
-    for index, choice in ipairs(ANNOUNCES) do
-        local segment = CreateFrame("Button", nil, group)
-        segment.value = choice.value
-        segment.label = UI.Text(segment, "GameFontNormalSmall")
-        segment.label:SetText(choice.label)
-        segment.label:SetWordWrap(false)
-        local width = math.ceil((segment.label:GetStringWidth() or 32) + 18)
-        segment:SetSize(width, M.rowH - 2)
-        segment:SetPoint("TOPLEFT", group, "TOPLEFT", x, -1)
-        segment.label:SetPoint("CENTER")
-        x = x + width
-        segment.wash = segment:CreateTexture(nil, "ARTWORK")
-        segment.wash:SetAllPoints(segment)
-        segment.wash:SetColorTexture(UI.C.accent[1], UI.C.accent[2], UI.C.accent[3], 0.30)
-        segment:SetScript("OnClick", function(self)
-            Storage.account.announce = self.value
-            paint()
-        end)
-        segment:SetScript("OnEnter", function(self)
-            self.hover = true
-            paint()
-            GameTooltip:SetOwner(self, "ANCHOR_TOP")
-            GameTooltip:SetText(ns.L.SETTING_ANNOUNCE)
-            GameTooltip:Show()
-        end)
-        segment:SetScript("OnLeave", function(self)
-            self.hover = false
-            paint()
-            if GameTooltip:IsOwned(self) then GameTooltip:Hide() end
-        end)
-        segments[index] = segment
-    end
-    group:SetWidth(x)
+    local group = UI.Segmented(row, ANNOUNCES, nil,
+        function() return Storage.account.announce end,
+        function(value)
+            Storage.account.announce = value
+            test:SetEnabled(value ~= "NONE")
+        end,
+        ns.L.SETTING_ANNOUNCE)
+    group:SetPoint("TOPLEFT", row, "TOPLEFT", 0, 0)
 
-    test = UI.Button(row, text("SETTING_ANNOUNCE_TEST", "Test"), M.announceTest, function()
+    test = UI.Button(row, ns.L.SETTING_ANNOUNCE_TEST, M.announceTest, function()
         ns.Announce(string.format(ns.L.LEFT_BEHIND, announceSample()))
     end)
     test:SetHeight(M.rowH - 2)
     test:SetPoint("LEFT", group, "RIGHT", 8, 0)
-    row:SetWidth(x + 8 + M.announceTest)
-    paint()
+    test:SetEnabled(Storage.account.announce ~= "NONE")
+    row:SetWidth(group:GetWidth() + 8 + M.announceTest)
     return row
 end
 
@@ -591,19 +440,18 @@ local function profileRow(index)
     row:SetPoint("TOPLEFT", profileList, "TOPLEFT", 0, -(index - 1) * M.rowH)
     row:SetPoint("TOPRIGHT", profileList, "TOPRIGHT", 0, -(index - 1) * M.rowH)
 
-    row.delete = UI.Button(row, text("PROFILE_DELETE", "Delete"), M.profileAction, function()
+    row.delete = UI.Button(row, ns.L.PROFILE_DELETE, M.profileAction, function()
         Profiles.Delete(row.name)
         syncProfiles()
     end)
     row.delete:SetHeight(M.rowH - 2)
     row.delete:SetPoint("RIGHT", row, "RIGHT", 0, 0)
 
-    row.apply = UI.Button(row, text("PROFILE_APPLY", "Apply"), M.profileAction, function()
+    row.apply = UI.Button(row, ns.L.PROFILE_APPLY, M.profileAction, function()
         local added = Profiles.Apply(row.name)
         ns.Print(string.format(ns.L.PROFILE_APPLIED, added))
         UI.List.ClearSelection()
-        AutoLoot.Sync()
-        Wrapper.Sync()
+        ns.Resync()
         UI.Refresh()
     end)
     row.apply:SetHeight(M.rowH - 2)
@@ -645,8 +493,8 @@ local function hideTransfer()
 end
 
 local function openTransfer(editable)
-    transferBox.locked = not editable
-    transferBox:SetText(editable and "" or Profiles.Export())
+    transferBox.exported = not editable and Profiles.Export() or nil
+    transferBox:SetText(transferBox.exported or "")
     transferAccept:SetShown(editable)
     transferBox:Show()
     transferGroup:SetHeight(M.rowH * 2 + 6)
@@ -661,8 +509,7 @@ local function acceptImport()
         ns.Print(string.format(ns.L.IMPORT_RESULT, added, result))
         hideTransfer()
         UI.List.ClearSelection()
-        AutoLoot.Sync()
-        Wrapper.Sync()
+        ns.Resync()
         UI.Refresh()
         return
     end
@@ -674,11 +521,11 @@ local function buildProfileSave(canvas)
     group:SetSize(M.profileField + 8 + M.profileButton, M.rowH)
 
     profileName = UI.Search(group, M.profileField,
-        text("PROFILE_NAME_PLACEHOLDER", "Profile name"), paintSave)
+        ns.L.PROFILE_NAME_PLACEHOLDER, paintSave)
     profileName:SetHeight(M.rowH - 2)
     profileName:SetPoint("LEFT", group, "LEFT", 0, 0)
 
-    profileSave = UI.Button(group, text("PROFILE_SAVE", "Save current"), M.profileButton, function()
+    profileSave = UI.Button(group, ns.L.PROFILE_SAVE, M.profileButton, function()
         Profiles.Save(trim(profileName:GetText()))
         profileName:SetText("")
         profileName:ClearFocus()
@@ -696,7 +543,7 @@ local function buildProfileList(canvas)
     profileEmpty:SetPoint("LEFT", profileList, "TOPLEFT", 0, -M.rowH / 2)
     profileEmpty:SetJustifyH("LEFT")
     profileEmpty:SetWordWrap(false)
-    profileEmpty:SetText(text("PROFILE_NONE", "No profiles saved yet."))
+    profileEmpty:SetText(ns.L.PROFILE_NONE)
     UI.Ink(profileEmpty, UI.C.dim)
     return profileList
 end
@@ -705,17 +552,17 @@ local function buildTransfer(canvas)
     transferGroup = CreateFrame("Frame", nil, canvas)
     transferGroup:SetSize(M.scrollWidth - M.indent - 12, M.rowH)
 
-    transferExport = UI.Button(transferGroup, text("EXPORT", "Export"), M.transferButton,
+    transferExport = UI.Button(transferGroup, ns.L.EXPORT, M.transferButton,
         function() openTransfer(false) end)
     transferExport:SetHeight(M.rowH - 2)
     transferExport:SetPoint("TOPLEFT", transferGroup, "TOPLEFT", 0, -1)
 
-    local importButton = UI.Button(transferGroup, text("IMPORT", "Import"), M.transferButton,
+    local importButton = UI.Button(transferGroup, ns.L.IMPORT, M.transferButton,
         function() openTransfer(true) end)
     importButton:SetHeight(M.rowH - 2)
     importButton:SetPoint("LEFT", transferExport, "RIGHT", 8, 0)
 
-    transferAccept = UI.Button(transferGroup, text("IMPORT_ACCEPT", "Accept"),
+    transferAccept = UI.Button(transferGroup, ns.L.IMPORT_ACCEPT,
         M.transferAccept, acceptImport)
     transferAccept:SetHeight(M.rowH - 2)
     transferAccept:SetPoint("TOPRIGHT", transferGroup, "TOPRIGHT", 0, -(M.rowH + 6))
@@ -736,8 +583,8 @@ local function buildTransfer(canvas)
     transferBox:SetScript("OnEnterPressed", function(self) self:ClearFocus() end)
     transferBox:SetScript("OnEscapePressed", hideTransfer)
     transferBox:SetScript("OnTextChanged", function(self, userInput)
-        if userInput and self.locked then
-            self:SetText(Profiles.Export())
+        if userInput and self.exported then
+            self:SetText(self.exported)
             self:HighlightText()
         end
     end)
@@ -777,34 +624,37 @@ local function buildOptions(parent)
     optionsThumb:SetColorTexture(UI.C.accent[1], UI.C.accent[2], UI.C.accent[3], 0.6)
     optionsThumb:Hide()
 
-    local looting = addSection(text("SECTION_LOOTING", "Looting"))
-    addSetting(looting, buildModifier(optionsCanvas),
-        text("SETTING_MODIFIER", "Loot everything while holding"))
+    local looting = addSection(ns.L.SECTION_LOOTING)
+    addSetting(looting, UI.Segmented(optionsCanvas, MODIFIERS, 32,
+        function() return Storage.account.bypassModifier end,
+        function(value) Storage.account.bypassModifier = value end,
+        ns.L.SETTING_MODIFIER), ns.L.SETTING_MODIFIER)
     addSetting(looting, UI.Switch(optionsCanvas, ns.L.SETTING_WRAPPER,
         function() return Storage.account.wrapper end,
         function(on)
             Storage.account.wrapper = on
             Wrapper.Sync()
-        end), nil, text("SETTING_WRAPPER_HELP",
-        "Some addons loot for you and skip No Thanks!. Leave this on to apply your blacklist to them too."))
+        end), nil, ns.L.SETTING_WRAPPER_HELP)
 
-    local editing = addSection(text("SECTION_BLACKLIST", "Editing the blacklist"))
-    addSetting(editing, buildQuickAdd(optionsCanvas),
-        text("SETTING_QUICKADD", "Blacklist an item with"),
+    local editing = addSection(ns.L.SECTION_BLACKLIST)
+    addSetting(editing, UI.Segmented(optionsCanvas, QUICKADDS, 40,
+        function() return Storage.account.quickAddBinding end,
+        function(value) Storage.account.quickAddBinding = value end,
+        ns.L.SETTING_QUICKADD), ns.L.SETTING_QUICKADD,
         ns.L.SETTING_QUICKADD_HELP)
     addSetting(editing, buildProfileSave(optionsCanvas),
-        text("SETTING_PROFILES", "Profiles"),
+        ns.L.SETTING_PROFILES,
         ns.L.SETTING_PROFILES_HELP)
     addRow(editing, buildProfileList(optionsCanvas), M.indent + M.labelWidth)
     addRow(editing, buildTransfer(optionsCanvas), M.indent)
 
-    local notify = addSection(text("SECTION_NOTIFICATIONS", "Notifications"))
+    local notify = addSection(ns.L.SECTION_NOTIFICATIONS)
     addSetting(notify, buildAnnounce(optionsCanvas),
-        text("SETTING_ANNOUNCE", "Announce skipped items in"),
+        ns.L.SETTING_ANNOUNCE,
         ns.L.SETTING_ANNOUNCE_HELP)
 
-    local window = addSection(text("SECTION_WINDOW", "Window"))
-    addSetting(window, UI.Slider(optionsCanvas, text("SETTING_SCALE", "Window scale"), 0.8, 1.5, 0.05,
+    local window = addSection(ns.L.SECTION_WINDOW)
+    addSetting(window, UI.Slider(optionsCanvas, ns.L.SETTING_SCALE, 0.8, 1.5, 0.05,
         function() return Storage.account.windowScale end,
         function(value)
             Storage.account.windowScale = value
