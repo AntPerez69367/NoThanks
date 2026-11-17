@@ -3,6 +3,7 @@
 ## Notes: Leaves blacklisted items on the corpse when you loot.
 ## Version: 0.1.0
 ## Category: Inventory
+## IconTexture: Interface\AddOns\NoThanks\Media\icon.tga
 ## SavedVariables: NoThanksDB
 ## SavedVariablesPerCharacter: NoThanksCharDB
 ## OptionalDeps: Auctionator
