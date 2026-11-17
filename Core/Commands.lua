@@ -1,5 +1,6 @@
 local addonName, ns = ...
 local Storage, AutoLoot, Loot, UI = ns.Storage, ns.AutoLoot, ns.Loot, ns.UI
+local Button = ns.Minimap
 
 local function devCommand(argument)
     local verb, value = argument:match("^(%S*)%s*(%S*)$")
@@ -41,6 +42,7 @@ bootstrap:SetScript("OnEvent", function(self, _, loaded)
     self:UnregisterEvent("ADDON_LOADED")
     Storage.Initialise()
     ns.LoadLocale()
+    Button.Initialise()
     Loot.Initialise()
     AutoLoot.Initialise()
     UI.RegisterOptions()

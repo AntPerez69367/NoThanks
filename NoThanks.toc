@@ -10,10 +10,16 @@
 ## X-Curse-Project-ID: 1813293
 ## X-License: GPL-3.0-or-later
 
+Libs/LibStub/LibStub.lua
+Libs/CallbackHandler-1.0/CallbackHandler-1.0.lua
+Libs/LibDataBroker-1.1/LibDataBroker-1.1.lua
+Libs/LibDBIcon-1.0/LibDBIcon-1.0.lua
+
 Core/Namespace.lua
 Core/Storage.lua
 Core/Profiles.lua
 Locales.lua
+Core/Minimap.lua
 Core/Filter.lua
 Core/AutoLoot.lua
 Core/History.lua

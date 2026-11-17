@@ -8,6 +8,7 @@ local ACCOUNT_DEFAULTS = {
     quickAddBinding = "SHIFT",
     windowScale = 1.0,
     profiles = "table",
+    minimap = "table",
 }
 
 local CHARACTER_DEFAULTS = {

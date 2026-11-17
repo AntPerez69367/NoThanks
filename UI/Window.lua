@@ -664,6 +664,12 @@ local function buildOptions(parent)
             frame:ClearAllPoints()
             frame:SetPoint("CENTER", UIParent, "BOTTOMLEFT", x * previous / value, y * previous / value)
         end))
+    addSetting(window, UI.Switch(optionsCanvas, ns.L.SETTING_MINIMAP,
+        function() return not Storage.account.minimap.hide end,
+        function(on)
+            Storage.account.minimap.hide = not on
+            ns.Minimap.SetShown(on)
+        end))
 
     syncProfiles()
     page:Hide()
@@ -701,4 +707,10 @@ end
 function UI.Toggle()
     if not frame then build() end
     if frame:IsShown() then frame:Hide() else frame:Show() end
+end
+
+function UI.Open(tab)
+    if not frame then build() end
+    frame:Show()
+    switchTab(tab)
 end
