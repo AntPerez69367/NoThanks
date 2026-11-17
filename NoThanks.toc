@@ -1,0 +1,25 @@
+## Interface: 16001
+## Title: No Thanks!
+## Notes: Leaves blacklisted items on the corpse when you loot.
+## Version: 0.1.0
+## Category: Inventory
+## SavedVariables: NoThanksDB
+## SavedVariablesPerCharacter: NoThanksCharDB
+## OptionalDeps: Auctionator
+## X-License: GPL-3.0-or-later
+
+Core/Namespace.lua
+Core/Storage.lua
+Core/Profiles.lua
+Locales.lua
+Core/Filter.lua
+Core/AutoLoot.lua
+Core/History.lua
+Core/Prices.lua
+Core/Wrapper.lua
+Core/Loot.lua
+UI/Widgets.lua
+UI/ItemList.lua
+UI/Window.lua
+UI/OptionsStub.lua
+Core/Commands.lua
