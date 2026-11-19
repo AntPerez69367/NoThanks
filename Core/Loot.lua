@@ -1,5 +1,6 @@
 local addonName, ns = ...
 local Loot, Filter, Storage, History, Wrapper = ns.Loot, ns.Filter, ns.Storage, ns.History, ns.Wrapper
+local Destroy = ns.Destroy
 
 local PACE = 0.1
 local CLOSE_GRACE = 0.4
@@ -85,9 +86,13 @@ local function drain(queue, token, index)
     C_Timer.After(PACE, function() drain(queue, token, index + 1) end)
 end
 
-local function announce(links)
-    if #links == 0 then return end
-    ns.Announce(string.format(ns.L.LEFT_BEHIND, table.concat(links, ", ")))
+local function announce(links, destroyed)
+    if #links > 0 then
+        ns.Announce(string.format(ns.L.LEFT_BEHIND, table.concat(links, ", ")))
+    end
+    if #destroyed > 0 then
+        ns.Announce(string.format(ns.L.DESTROYED, table.concat(destroyed, ", ")))
+    end
 end
 
 local function onLootWindow()
@@ -128,19 +133,25 @@ local function onLootWindow()
         return
     end
 
-    local links = {}
+    local links, destroyed = {}, {}
     for slot = count, 1, -1 do
         local itemID, link = Filter.SlotItem(slot)
         captured[slot] = itemID
         if itemID and not Filter.SparesSlot(slot) and Filter.Refuses(itemID) then
-            if Loot.Refuse(itemID) then links[#links + 1] = ns.ItemLink(itemID, link) end
+            if Destroy.Eligible(itemID) then
+                if Loot.Refuse(itemID) then destroyed[#destroyed + 1] = ns.ItemLink(itemID, link) end
+                Destroy.Queue(itemID)
+                queue[#queue + 1] = slot
+            elseif Loot.Refuse(itemID) then
+                links[#links + 1] = ns.ItemLink(itemID, link)
+            end
         else
             if itemID then History.Record(itemID) end
             queue[#queue + 1] = slot
         end
     end
     leftBehind = count - #queue
-    announce(links)
+    announce(links, destroyed)
     draining = true
     drain(queue, token, 1)
 end
@@ -149,7 +160,7 @@ local function onSlotCleared(slot)
     if Storage.account.wrapper or warned or not draining or cleared[slot] then return end
     cleared[slot] = true
     local itemID = captured[slot]
-    if itemID and refused[itemID] then
+    if itemID and refused[itemID] and not Destroy.Eligible(itemID) then
         warned = true
         ns.Print(ns.L.INTERFERENCE)
     end

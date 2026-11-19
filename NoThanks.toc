@@ -21,6 +21,7 @@ Core/Profiles.lua
 Locales.lua
 Core/Minimap.lua
 Core/Filter.lua
+Core/Destroy.lua
 Core/AutoLoot.lua
 Core/History.lua
 Core/Prices.lua

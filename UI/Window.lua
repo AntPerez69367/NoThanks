@@ -8,6 +8,12 @@ local MODIFIERS = {
     { value = "CTRL", label = "CTRL" },
     { value = "ALT", label = "ALT" },
 }
+local DESTROY_QUALITIES = {
+    { value = 0, label = ITEM_QUALITY0_DESC },
+    { value = 1, label = ITEM_QUALITY1_DESC },
+    { value = 2, label = ITEM_QUALITY2_DESC },
+    { value = 3, label = ITEM_QUALITY3_DESC },
+}
 local QUICKADDS = {
     { value = "SHIFT", label = "Shift" },
     { value = "CTRL", label = "Ctrl" },
@@ -635,6 +641,13 @@ local function buildOptions(parent)
             Storage.account.wrapper = on
             Wrapper.Sync()
         end), nil, ns.L.SETTING_WRAPPER_HELP)
+    addSetting(looting, UI.Switch(optionsCanvas, ns.L.SETTING_DESTROY,
+        function() return Storage.account.destroy end,
+        function(on) Storage.account.destroy = on end), nil, ns.L.SETTING_DESTROY_HELP)
+    addSetting(looting, UI.Segmented(optionsCanvas, DESTROY_QUALITIES, nil,
+        function() return Storage.account.destroyQuality end,
+        function(value) Storage.account.destroyQuality = value end,
+        ns.L.SETTING_DESTROY_QUALITY), ns.L.SETTING_DESTROY_QUALITY)
 
     local editing = addSection(ns.L.SECTION_BLACKLIST)
     addSetting(editing, UI.Segmented(optionsCanvas, QUICKADDS, 40,

@@ -9,6 +9,7 @@ ns.History = {}
 ns.Profiles = {}
 ns.Prices = {}
 ns.Loot = {}
+ns.Destroy = {}
 ns.Minimap = {}
 ns.UI = {}
 ns.L = {}
