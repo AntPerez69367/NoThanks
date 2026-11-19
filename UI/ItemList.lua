@@ -1,6 +1,6 @@
 local addonName, ns = ...
 local UI, Storage, Prices = ns.UI, ns.Storage, ns.Prices
-local Filter = ns.Filter
+local Filter, History = ns.Filter, ns.History
 
 local ROW_HEIGHT = 22
 local VISIBLE_ROWS = 12
@@ -16,6 +16,7 @@ local GUTTER = 4
 local GUTTER_SPAN = 8
 local THUMB_MIN = 18
 local REFRESH_DELAY = 0.3
+local WEEK_SPAN = 7 * 24 * 60 * 60
 
 local List = {}
 UI.List = List
@@ -200,6 +201,14 @@ local function matches(key, name, quality, search, qualities)
     return true
 end
 
+local function inWindow(seen)
+    local window = Storage.account.lootWindow
+    if window == "ALL" then return true end
+    if not seen or seen == 0 then return false end
+    if window == "SESSION" then return seen >= History.SessionStart end
+    return seen >= time() - WEEK_SPAN
+end
+
 local function listed(key, itemID, blacklisted)
     if blacklisted then return true end
     return not (Storage.IsBlacklisted(key) or Filter.IsQuestItem(itemID))
@@ -215,7 +224,7 @@ function List.Build(tab, search, qualities)
     local source = blacklisted and Storage.Blacklist() or Storage.History()
     for key, record in pairs(source) do
         local itemID = tonumber(key)
-        if listed(key, itemID, blacklisted) then
+        if (blacklisted or inWindow(record.seen)) and listed(key, itemID, blacklisted) then
             unfilteredTotal = unfilteredTotal + 1
             local name, link, quality, _, _, _, _, _, _, icon = ns.ItemInfo(itemID)
             if not name then unresolved = true end
@@ -255,8 +264,10 @@ function List.TabTotal(tab)
     local blacklisted = (tab == "blacklist")
     local source = blacklisted and Storage.Blacklist() or Storage.History()
     local total = 0
-    for key in pairs(source) do
-        if listed(key, tonumber(key), blacklisted) then total = total + 1 end
+    for key, record in pairs(source) do
+        if (blacklisted or inWindow(record.seen)) and listed(key, tonumber(key), blacklisted) then
+            total = total + 1
+        end
     end
     return total
 end

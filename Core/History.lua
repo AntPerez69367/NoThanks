@@ -3,6 +3,8 @@ local History, Storage = ns.History, ns.Storage
 
 local CAP = 500
 
+History.SessionStart = time()
+
 local function size(store)
     local count = 0
     for _ in pairs(store) do count = count + 1 end
@@ -38,4 +40,8 @@ function History.Record(itemID)
     end
     store[key] = { count = 1, seen = time() }
     History.Prune()
+end
+
+function History.Clear()
+    wipe(Storage.History())
 end

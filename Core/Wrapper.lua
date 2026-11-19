@@ -1,5 +1,5 @@
 local addonName, ns = ...
-local Wrapper, Filter, Storage = ns.Wrapper, ns.Filter, ns.Storage
+local Wrapper, Filter, Storage, Destroy = ns.Wrapper, ns.Filter, ns.Storage, ns.Destroy
 
 local original = nil
 local ours = nil
@@ -11,6 +11,13 @@ local function wrapped(slot, ...)
     local ok, refuses = pcall(Filter.RefusesSlot, slot)
     if not ok or not refuses then return original(slot, ...) end
     local itemID, link = Filter.SlotItem(slot)
+    if itemID and Destroy.Eligible(itemID) then
+        if ns.Loot.Refuse(itemID) then
+            ns.Announce(string.format(ns.L.DESTROYED, ns.ItemLink(itemID, link)))
+        end
+        Destroy.Queue(itemID)
+        return original(slot, ...)
+    end
     if itemID and ns.Loot.Refuse(itemID) then
         ns.Announce(string.format(ns.L.LEFT_BEHIND, ns.ItemLink(itemID, link)))
     end

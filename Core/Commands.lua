@@ -1,5 +1,6 @@
 local addonName, ns = ...
 local Storage, AutoLoot, Loot, UI = ns.Storage, ns.AutoLoot, ns.Loot, ns.UI
+local Destroy = ns.Destroy
 local Button = ns.Minimap
 
 local function devCommand(argument)
@@ -44,6 +45,7 @@ bootstrap:SetScript("OnEvent", function(self, _, loaded)
     ns.LoadLocale()
     Button.Initialise()
     Loot.Initialise()
+    Destroy.Initialise()
     AutoLoot.Initialise()
     UI.RegisterOptions()
     ns.Resync()

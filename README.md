@@ -1,7 +1,7 @@
 # No Thanks!
 
-A loot filter for the WoW Forever client. You decide which items are junk; blacklisted
-items stay on the corpse when you loot.
+A loot filter for the WoW Forever client. You decide which items are junk. Blacklisted
+items stay on the corpse when you loot, or go to your bags and get destroyed.
 
 ## Install
 
@@ -13,8 +13,10 @@ a release zip there directly.
 Open the window with `/nothanks`, `/noty` or `/nt`.
 
 - **Loot** lists everything you have picked up, most recent first, with vendor and
-  auction prices when Auctionator is installed.
-- **Blacklist** lists what you are skipping, and how many times each item has been left.
+  auction prices when Auctionator is installed. **Show items from** limits the list to
+  this session, the last 7 days, or the full history. **Clear history** empties the
+  list and leaves your blacklist alone.
+- **Blacklist** lists what you are skipping, and how many times each item was skipped.
 - **Options** holds the settings below.
 
 Select rows and use the button at the bottom to add or remove in bulk. To change a
@@ -26,13 +28,18 @@ Hold the bypass modifier while looting to take everything and ignore the filter.
 
 ## Settings
 
-- **Loot everything while holding** — Shift, Ctrl or Alt.
-- **Filter loot taken by other addons** — some addons loot for you and would otherwise
-  bypass the filter. Leave this on to apply your blacklist to them too.
-- **Blacklist an item with** — the quick-add binding.
-- **Announce skipped items in** — chat, the message area at the top of the screen, or
-  nowhere. Item links are only clickable in chat.
+- **Loot all items with** — Shift, Ctrl or Alt. Hold it to take everything.
+- **Apply the blacklist to other addons** — some addons loot for you and would
+  otherwise bypass the filter. Leave this on to apply your blacklist to them too.
+- **Destroy blacklisted items** — blacklisted items go to your bags and the addon
+  destroys them, with no prompt. Off until you turn it on.
+- **Maximum quality to destroy** — nothing above this quality is destroyed. Quest
+  items are never destroyed.
+- **Add to the blacklist with** — the quick-add binding.
+- **Show messages in** — chat, the message area at the top of the screen, or nowhere.
+  You can click item links only in chat.
 - **Window scale** — 80% to 150%.
+- **Show a minimap button** — on or off.
 
 ## Profiles and sharing
 

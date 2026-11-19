@@ -1,6 +1,6 @@
 ## Interface: 16001
 ## Title: No Thanks!
-## Notes: Leaves blacklisted items on the corpse when you loot.
+## Notes: Leaves blacklisted items on the corpse, or destroys them for you.
 ## Version: 0.1.1
 ## Category: Inventory
 ## IconTexture: Interface\AddOns\NoThanks\Media\icon.tga
@@ -21,6 +21,7 @@ Core/Profiles.lua
 Locales.lua
 Core/Minimap.lua
 Core/Filter.lua
+Core/Destroy.lua
 Core/AutoLoot.lua
 Core/History.lua
 Core/Prices.lua
