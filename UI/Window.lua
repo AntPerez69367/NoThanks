@@ -25,6 +25,7 @@ local ANNOUNCES = {
     { value = "NONE", label = "Off" },
 }
 local TABS = { "loot", "blacklist", "options" }
+local CLEAR_POPUP = "NOTHANKS_CLEAR_HISTORY"
 local GUTTER = 4
 local THUMB_MIN = 18
 local WHEEL_STEP = 28
@@ -72,6 +73,7 @@ local M = {
 }
 
 local frame, listPage, optionsPage, tabStrip, searchBox, bulkButton, clearButton, status
+local windowGroup, clearHistory
 local optionsPanel, optionsScroll, optionsCanvas, optionsTrack, optionsThumb
 local optionsOffset, optionsSpan = 0, 0
 local tabs, swatches, conditionals, sections = {}, {}, {}, {}
@@ -93,6 +95,9 @@ end
 local function emptyMessage()
     if filtering() then return ns.L.EMPTY_FILTER end
     if currentTab == "blacklist" then return ns.L.EMPTY_BLACKLIST end
+    if Storage.account.lootWindow ~= "ALL" and next(Storage.History()) ~= nil then
+        return ns.L.EMPTY_WINDOW
+    end
     return ns.L.EMPTY_LOOT
 end
 
@@ -294,12 +299,59 @@ local function buildActions(parent)
     clearButton.visible = function() return #UI.List.Selected() > 0 end
     conditionals[#conditionals + 1] = clearButton
 
+    local windows = {
+        { value = "SESSION", label = ns.L.WINDOW_SESSION },
+        { value = "WEEK", label = ns.L.WINDOW_WEEK },
+        { value = "ALL", label = ns.L.WINDOW_ALL },
+    }
+    windowGroup = UI.Segmented(parent, windows, nil,
+        function() return Storage.account.lootWindow end,
+        function(value)
+            Storage.account.lootWindow = value
+            UI.List.ClearSelection()
+            UI.Refresh()
+        end,
+        ns.L.FILTER_WINDOW)
+    windowGroup:SetPoint("TOPRIGHT", parent, "TOPRIGHT", -M.pad, M.actionTop - 1)
+    windowGroup.visible = function() return currentTab == "loot" end
+    conditionals[#conditionals + 1] = windowGroup
+
     status = UI.Text(parent, "GameFontNormalSmall")
     status:SetPoint("TOPLEFT", parent, "TOPLEFT", M.pad, M.statusTop)
     status:SetWidth(M.listWidth)
     status:SetJustifyH("LEFT")
     status:SetWordWrap(false)
     UI.Ink(status, UI.C.dim)
+
+    StaticPopupDialogs[CLEAR_POPUP] = {
+        text = ns.L.CLEAR_HISTORY_CONFIRM,
+        button1 = ACCEPT,
+        button2 = CANCEL,
+        whileDead = 1,
+        hideOnEscape = 1,
+        timeout = 0,
+        OnAccept = function()
+            ns.History.Clear()
+            UI.List.ClearSelection()
+            UI.Refresh()
+        end,
+    }
+
+    clearHistory = CreateFrame("Button", nil, parent)
+    clearHistory:SetHeight(M.actionH)
+    clearHistory:SetPoint("RIGHT", status, "RIGHT", 0, 0)
+    clearHistory.label = UI.Text(clearHistory, "GameFontNormalSmall")
+    clearHistory.label:SetPoint("CENTER")
+    clearHistory.label:SetText(ns.L.CLEAR_HISTORY)
+    clearHistory:SetWidth(math.ceil(clearHistory.label:GetStringWidth() + 16))
+    UI.Ink(clearHistory.label, UI.C.muted)
+    clearHistory:SetScript("OnEnter", function(self) UI.Ink(self.label, UI.C.accent) end)
+    clearHistory:SetScript("OnLeave", function(self) UI.Ink(self.label, UI.C.muted) end)
+    clearHistory:SetScript("OnClick", function() StaticPopup_Show(CLEAR_POPUP) end)
+    clearHistory.visible = function()
+        return currentTab == "loot" and next(Storage.History()) ~= nil
+    end
+    conditionals[#conditionals + 1] = clearHistory
 end
 
 local function paintOptionsScroll()

@@ -9,6 +9,7 @@ local ACCOUNT_DEFAULTS = {
     destroyQuality = 1,
     quickAddBinding = "SHIFT",
     windowScale = 1.0,
+    lootWindow = "WEEK",
     profiles = "table",
     minimap = "table",
 }
