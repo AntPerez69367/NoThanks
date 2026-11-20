@@ -1,6 +1,8 @@
 local addonName, ns = ...
 local Destroy, Filter, Storage = ns.Destroy, ns.Filter, ns.Storage
 
+local WINDOW = 30
+
 local pending = {}
 
 local function plain(value)
@@ -41,7 +43,7 @@ end
 function Destroy.Eligible(itemID)
     if not Storage.account.destroy then return false end
     if not itemID or not Filter.Refuses(itemID) then return false end
-    if Filter.IsQuestItem(itemID) then return false end
+    if Filter.IsQuestItem(itemID) ~= false then return false end
     local _, _, quality = ns.ItemInfo(itemID)
     quality = tonumber(quality)
     if not quality then return false end
@@ -50,23 +52,39 @@ end
 
 function Destroy.Queue(itemID)
     if not itemID then return end
-    pending[itemID] = true
+    local entry = pending[itemID]
+    if entry then
+        entry.count = entry.count + 1
+        entry.expires = GetTime() + WINDOW
+        return
+    end
+    pending[itemID] = { count = 1, expires = GetTime() + WINDOW }
+end
+
+local function prune()
+    local now = GetTime()
+    for itemID, entry in pairs(pending) do
+        if entry.expires <= now then pending[itemID] = nil end
+    end
 end
 
 local function destroySlot(bag, slot, itemID)
     local pickup = (C_Container and C_Container.PickupContainerItem) or PickupContainerItem
-    if type(pickup) ~= "function" then return end
-    if not pcall(pickup, bag, slot) then return end
+    if type(pickup) ~= "function" then return false end
+    if not pcall(pickup, bag, slot) then return false end
     local kind, cursorID = cursorItem()
     if kind ~= "item" or cursorID ~= itemID then
         ClearCursor()
-        return
+        return false
     end
     DeleteCursorItem()
     if CursorHasItem() then ClearCursor() end
+    return true
 end
 
 local function flush()
+    if not next(pending) then return end
+    prune()
     if not next(pending) then return end
     if InCombatLockdown() then return end
     local known, dead = pcall(UnitIsDeadOrGhost, "player")
@@ -75,9 +93,12 @@ local function flush()
     for bag = 0, lastBag() do
         for slot = 1, bagSlots(bag) do
             local itemID, locked = bagSlotItem(bag, slot)
-            if itemID and pending[itemID] and not locked and Destroy.Eligible(itemID) then
-                pending[itemID] = nil
-                destroySlot(bag, slot, itemID)
+            local entry = itemID and pending[itemID]
+            if entry and not locked and Destroy.Eligible(itemID) then
+                if destroySlot(bag, slot, itemID) then
+                    entry.count = entry.count - 1
+                    if entry.count <= 0 then pending[itemID] = nil end
+                end
                 return
             end
         end

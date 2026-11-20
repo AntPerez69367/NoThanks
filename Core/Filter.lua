@@ -33,10 +33,12 @@ end
 
 function Filter.IsQuestItem(itemID)
     local getter = (C_Item and C_Item.GetItemInfoInstant) or GetItemInfoInstant
-    if type(getter) ~= "function" then return false end
+    if type(getter) ~= "function" then return nil end
     local ok, _, _, _, _, _, classID = pcall(getter, itemID)
-    if not ok then return false end
-    return plain(classID) == QUEST_CLASS
+    if not ok then return nil end
+    classID = plain(classID)
+    if classID == nil then return nil end
+    return classID == QUEST_CLASS
 end
 
 function Filter.Refuses(itemID)
