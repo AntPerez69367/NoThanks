@@ -1,3 +1,7 @@
+## 0.1.3-beta
+
+- Bugfixes and improvements.
+
 ## 0.1.2-beta
 
 - New option: **Destroy blacklisted items**. Blacklisted items go to your bags and the
