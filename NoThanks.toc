@@ -1,7 +1,7 @@
 ## Interface: 16001
 ## Title: No Thanks!
 ## Notes: Leaves blacklisted items on the corpse, or destroys them for you.
-## Version: 0.1.1
+## Version: @project-version@
 ## Category: Inventory
 ## IconTexture: Interface\AddOns\NoThanks\Media\icon.tga
 ## SavedVariables: NoThanksDB
