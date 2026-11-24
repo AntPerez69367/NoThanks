@@ -14,6 +14,11 @@ ns.Minimap = {}
 ns.UI = {}
 ns.L = {}
 
+local function plain(value)
+    if type(issecretvalue) == "function" and issecretvalue(value) then return nil end
+    return value
+end
+
 function ns.Print(message)
     print("|cff66ccffNo Thanks!|r " .. tostring(message))
 end
@@ -39,7 +44,8 @@ function ns.ItemInfo(itemID)
     local ok, name, link, quality, iLevel, reqLevel, class, subclass, stack, slot, icon, price =
         pcall(getter, itemID)
     if not ok then return nil end
-    return name, link, quality, iLevel, reqLevel, class, subclass, stack, slot, icon, price
+    return plain(name), plain(link), plain(quality), plain(iLevel), plain(reqLevel), plain(class),
+        plain(subclass), plain(stack), plain(slot), plain(icon), plain(price)
 end
 
 function ns.ItemLink(itemID, known)

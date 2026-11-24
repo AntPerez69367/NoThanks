@@ -24,7 +24,8 @@ single item, click it with the quick-add binding — Shift, Ctrl or right-click,
 you set. It works both ways: on the Loot tab it blacklists, on the Blacklist tab it
 takes the item back off.
 
-Hold the bypass modifier while looting to take everything and ignore the filter.
+Hold your **Loot all items with** modifier while looting to take everything and
+ignore the filter.
 
 ## Settings
 
