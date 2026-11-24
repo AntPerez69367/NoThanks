@@ -1,3 +1,8 @@
+## 1.0.0
+
+- Fixed item lookups that could return a secret value on this client and raise an error
+  in the loot pipeline or the window.
+
 ## 0.1.3-beta
 
 - Bugfixes and improvements.
