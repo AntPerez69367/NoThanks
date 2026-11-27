@@ -8,6 +8,15 @@ local EDGES = {
     { "TOPRIGHT", "BOTTOMRIGHT", true },
 }
 
+local Coins = (C_CurrencyInfo and C_CurrencyInfo.GetCoinTextureString)
+    or GetCoinTextureString or ns.Money
+
+local CARET = { 7, 5, 3, 1 }
+local DROP_ROWS = 10
+local DROP_ROW = 18
+local DROP_GUTTER = 4
+local DROP_THUMB = 12
+
 UI.C = {
     accent = { 0.38, 0.68, 1.00 },
     frame = { 0.064, 0.070, 0.084 },
@@ -71,6 +80,11 @@ function UI.Rule(frame, side, color, alpha, inset)
     return texture
 end
 
+function UI.Unhover(frame, handler)
+    frame:SetScript("OnLeave", handler)
+    frame:SetScript("OnHide", handler)
+end
+
 function UI.Button(parent, label, width, onClick)
     local button = CreateFrame("Button", nil, parent)
     button:SetSize(width, 22)
@@ -102,13 +116,13 @@ function UI.Button(parent, label, width, onClick)
         self.Apply()
     end
     button:SetScript("OnEnter", function(self) self.hover = true; self.Apply() end)
-    button:SetScript("OnLeave", function(self) self.hover = false; self.Apply() end)
+    UI.Unhover(button, function(self) self.hover = false; self.Apply() end)
     button:SetScript("OnClick", onClick)
     button.Apply()
     return button
 end
 
-function UI.Search(parent, width, placeholder, onChange)
+function UI.Search(parent, width, placeholder, onChange, reject)
     local box = CreateFrame("EditBox", nil, parent)
     box:SetSize(width, 22)
     box:EnableMouse(true)
@@ -135,13 +149,16 @@ function UI.Search(parent, width, placeholder, onChange)
     clear.label:SetText("x")
     UI.Ink(clear.label, UI.C.muted)
     clear:SetScript("OnEnter", function(self) UI.Ink(self.label, UI.C.white) end)
-    clear:SetScript("OnLeave", function(self) UI.Ink(self.label, UI.C.muted) end)
+    UI.Unhover(clear, function(self) UI.Ink(self.label, UI.C.muted) end)
 
     box.Apply = function()
         local typed = box:GetText() ~= ""
         hint:SetShown(not typed)
         clear:SetShown(typed)
-        if box.focused then
+        if box.fault then
+            surface:SetColorTexture(UI.C.field[1], UI.C.field[2], UI.C.field[3], 1)
+            edge.Set(UI.C.bad)
+        elseif box.focused then
             surface:SetColorTexture(UI.C.fieldHover[1], UI.C.fieldHover[2], UI.C.fieldHover[3], 1)
             edge.Set(UI.C.accent)
         else
@@ -163,6 +180,15 @@ function UI.Search(parent, width, placeholder, onChange)
         onChange()
     end)
     box:SetScript("OnTextChanged", function(self, userInput)
+        if userInput and reject then
+            local text = self:GetText()
+            local clean = text:gsub(reject, "")
+            if clean ~= text then
+                local position = self:GetCursorPosition() - (#text - #clean)
+                self:SetText(clean)
+                self:SetCursorPosition(position > 0 and position or 0)
+            end
+        end
         self.Apply()
         if userInput then onChange() end
     end)
@@ -213,7 +239,7 @@ function UI.Segmented(parent, choices, segmentWidth, getter, setter, tooltip)
             GameTooltip:SetText(tooltip)
             GameTooltip:Show()
         end)
-        segment:SetScript("OnLeave", function(self)
+        UI.Unhover(segment, function(self)
             self.hover = false
             paint()
             if GameTooltip:IsOwned(self) then GameTooltip:Hide() end
@@ -221,8 +247,186 @@ function UI.Segmented(parent, choices, segmentWidth, getter, setter, tooltip)
         segments[index] = segment
     end
     group:SetWidth(x)
+    group.Apply = paint
     paint()
     return group
+end
+
+function UI.Dropdown(parent, width, choices, getter, setter)
+    local button = CreateFrame("Button", nil, parent)
+    button:SetSize(width, 22)
+    local surface = UI.Fill(button, UI.C.field)
+    local edge = UI.Edge(button, UI.C.borderDim)
+    button.label = UI.Text(button, "GameFontNormalSmall")
+    button.label:SetPoint("LEFT", button, "LEFT", 8, 0)
+    button.label:SetPoint("RIGHT", button, "RIGHT", -18, 0)
+    button.label:SetJustifyH("LEFT")
+    button.label:SetWordWrap(false)
+    local caret = {}
+    for index, span in ipairs(CARET) do
+        local piece = button:CreateTexture(nil, "OVERLAY")
+        piece:SetSize(span, 1)
+        piece:SetPoint("CENTER", button, "RIGHT", -10, 2 - index)
+        caret[index] = piece
+    end
+
+    local shield = CreateFrame("Button", nil, button)
+    shield:SetAllPoints(UIParent)
+    shield:SetFrameStrata("FULLSCREEN_DIALOG")
+    shield:RegisterForClicks("AnyUp")
+    shield:Hide()
+
+    local panel = CreateFrame("Frame", nil, button)
+    panel:SetSize(width, DROP_ROW + 2)
+    panel:SetFrameStrata("FULLSCREEN_DIALOG")
+    panel:SetFrameLevel(shield:GetFrameLevel() + 10)
+    panel:EnableMouse(true)
+    panel:EnableMouseWheel(true)
+    UI.Fill(panel, UI.C.content)
+    UI.Edge(panel, UI.C.border)
+    panel:Hide()
+    panel:SetScript("OnHide", function()
+        shield:Hide()
+    end)
+    local function close() panel:Hide() end
+    shield:SetScript("OnClick", close)
+
+    local bar = CreateFrame("Frame", nil, panel)
+    bar:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -2, -2)
+    bar:SetPoint("BOTTOMRIGHT", panel, "BOTTOMRIGHT", -2, 2)
+    bar:SetWidth(DROP_GUTTER)
+    bar:SetFrameLevel(panel:GetFrameLevel() + 5)
+    UI.Fill(bar, UI.C.white, 0.05)
+    local thumb = bar:CreateTexture(nil, "OVERLAY")
+    thumb:SetWidth(DROP_GUTTER)
+    thumb:SetColorTexture(UI.C.accent[1], UI.C.accent[2], UI.C.accent[3], 0.6)
+    bar:Hide()
+
+    local rows, list, offset = {}, {}, 0
+    local function dropRow(index)
+        local row = rows[index]
+        if row then return row end
+        row = CreateFrame("Button", nil, panel)
+        row:SetHeight(DROP_ROW)
+        row:SetPoint("TOPLEFT", panel, "TOPLEFT", 1, -(index - 1) * DROP_ROW - 1)
+        row:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -1, -(index - 1) * DROP_ROW - 1)
+        row.wash = row:CreateTexture(nil, "BACKGROUND")
+        row.wash:SetAllPoints(row)
+        row.label = UI.Text(row, "GameFontNormalSmall")
+        row.label:SetPoint("LEFT", row, "LEFT", 7, 0)
+        row.label:SetPoint("RIGHT", row, "RIGHT", -9, 0)
+        row.label:SetJustifyH("LEFT")
+        row.label:SetWordWrap(false)
+        row.Apply = function()
+            row.wash:SetColorTexture(UI.C.buttonHover[1], UI.C.buttonHover[2], UI.C.buttonHover[3],
+                row.hover and 1 or 0)
+            if row.chosen then
+                UI.Ink(row.label, UI.C.accent)
+            else
+                UI.Ink(row.label, row.hover and UI.C.white or UI.C.text)
+            end
+        end
+        row:SetScript("OnEnter", function(self) self.hover = true; self.Apply() end)
+        UI.Unhover(row, function(self) self.hover = false; self.Apply() end)
+        row:SetScript("OnClick", function(self)
+            close()
+            setter(self.value)
+            button.Apply()
+        end)
+        rows[index] = row
+        return row
+    end
+
+    local function paint()
+        local total = #list
+        local shown = math.min(total, DROP_ROWS)
+        local maxOffset = total - shown
+        if offset > maxOffset then offset = maxOffset end
+        if offset < 0 then offset = 0 end
+        local current = getter()
+        for index = 1, shown do
+            local choice = list[index + offset]
+            local row = dropRow(index)
+            row.value = choice.value
+            row.chosen = choice.value == current
+            row.label:SetText(choice.label)
+            row.Apply()
+            row:Show()
+        end
+        for index = shown + 1, #rows do rows[index]:Hide() end
+        panel:SetHeight(shown * DROP_ROW + 2)
+        bar:SetShown(maxOffset > 0)
+        if maxOffset > 0 then
+            local span = shown * DROP_ROW - 2
+            local height = math.max(DROP_THUMB, math.floor(span * shown / total))
+            thumb:SetHeight(height)
+            thumb:ClearAllPoints()
+            thumb:SetPoint("TOP", bar, "TOP", 0,
+                -math.floor((span - height) * offset / maxOffset))
+        end
+    end
+
+    panel:SetScript("OnMouseWheel", function(_, delta)
+        offset = offset - delta
+        paint()
+    end)
+
+    local function openList()
+        list = choices()
+        offset = 0
+        local current = getter()
+        for index, choice in ipairs(list) do
+            if choice.value == current then offset = math.max(0, index - DROP_ROWS) end
+        end
+        paint()
+        panel:ClearAllPoints()
+        if button:GetBottom() < panel:GetHeight() then
+            panel:SetPoint("BOTTOMLEFT", button, "TOPLEFT", 0, 2)
+        else
+            panel:SetPoint("TOPLEFT", button, "BOTTOMLEFT", 0, -2)
+        end
+        shield:Show()
+        panel:Show()
+    end
+
+    button.enabled = true
+    button.Apply = function()
+        local current, text = getter(), nil
+        for _, choice in ipairs(choices()) do
+            if choice.value == current then text = choice.label end
+        end
+        button.label:SetText(text or "")
+        local ink, alpha = UI.C.text, 1
+        if not button.enabled then
+            surface:SetColorTexture(UI.C.field[1], UI.C.field[2], UI.C.field[3], 0.40)
+            edge.Set(UI.C.borderDim, 0.45)
+            ink, alpha = UI.C.muted, 0.40
+        elseif button.hover or panel:IsShown() then
+            surface:SetColorTexture(UI.C.fieldHover[1], UI.C.fieldHover[2], UI.C.fieldHover[3], 1)
+            edge.Set(UI.C.accent)
+            ink = UI.C.white
+        else
+            surface:SetColorTexture(UI.C.field[1], UI.C.field[2], UI.C.field[3], 1)
+            edge.Set(UI.C.borderDim)
+        end
+        UI.Ink(button.label, ink, alpha)
+        for _, piece in ipairs(caret) do
+            piece:SetColorTexture(ink[1], ink[2], ink[3], alpha)
+        end
+    end
+    button.SetEnabled = function(self, value)
+        self.enabled = value and true or false
+        if self.enabled then self:Enable() else self:Disable() end
+        self.Apply()
+    end
+    button:SetScript("OnEnter", function(self) self.hover = true; self.Apply() end)
+    UI.Unhover(button, function(self) self.hover = false; self.Apply() end)
+    button:SetScript("OnClick", function()
+        if panel:IsShown() then close() else openList() end
+        button.Apply()
+    end)
+    button.Apply()
+    return button
 end
 
 function UI.Tab(parent, height, onClick)
@@ -251,7 +455,7 @@ function UI.Tab(parent, height, onClick)
         tab.Apply()
     end
     tab:SetScript("OnEnter", function(self) self.hover = true; self.Apply() end)
-    tab:SetScript("OnLeave", function(self) self.hover = false; self.Apply() end)
+    UI.Unhover(tab, function(self) self.hover = false; self.Apply() end)
     tab:SetScript("OnClick", onClick)
     return tab
 end
@@ -283,7 +487,7 @@ function UI.Section(parent, title, onToggle)
             header.hover and 1 or 0)
     end
     header:SetScript("OnEnter", function(self) self.hover = true; self.Apply() end)
-    header:SetScript("OnLeave", function(self) self.hover = false; self.Apply() end)
+    UI.Unhover(header, function(self) self.hover = false; self.Apply() end)
     header:SetScript("OnClick", function(self)
         self.expanded = not self.expanded
         self.Apply()
@@ -326,7 +530,7 @@ function UI.Switch(parent, label, getter, setter)
         row.Apply()
     end)
     row:SetScript("OnEnter", function(self) self.hover = true; self.Apply() end)
-    row:SetScript("OnLeave", function(self) self.hover = false; self.Apply() end)
+    UI.Unhover(row, function(self) self.hover = false; self.Apply() end)
     row.Apply()
     return row
 end
@@ -391,18 +595,7 @@ end
 function UI.MoneyShort(copper)
     if type(copper) ~= "number" then return ns.L.PRICE_UNKNOWN, 0.55, 0.55, 0.65 end
     if copper <= 0 then return ns.L.PRICE_NONE, 0.45, 0.45, 0.45 end
-    local gold = math.floor(copper / 10000)
-    local silver = math.floor((copper % 10000) / 100)
-    local bronze = copper % 100
-    if gold > 0 then
-        if silver > 0 then return string.format("%dg %ds", gold, silver), 0.95, 0.95, 0.95 end
-        return string.format("%dg", gold), 0.95, 0.95, 0.95
-    end
-    if silver > 0 then
-        if bronze > 0 then return string.format("%ds %dc", silver, bronze), 0.95, 0.95, 0.95 end
-        return string.format("%ds", silver), 0.95, 0.95, 0.95
-    end
-    return string.format("%dc", bronze), 0.95, 0.95, 0.95
+    return Coins(copper), 0.95, 0.95, 0.95
 end
 
 function UI.Swatch(parent, quality, size, getter, onClick)
@@ -429,7 +622,7 @@ function UI.Swatch(parent, quality, size, getter, onClick)
         GameTooltip:SetText(_G["ITEM_QUALITY" .. quality .. "_DESC"] or tostring(quality), r, g, b)
         GameTooltip:Show()
     end)
-    button:SetScript("OnLeave", function(self)
+    UI.Unhover(button, function(self)
         if GameTooltip:IsOwned(self) then GameTooltip:Hide() end
     end)
     button.Apply()

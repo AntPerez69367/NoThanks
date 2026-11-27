@@ -14,9 +14,10 @@ local generation = 0
 local deadline = nil
 local leftBehind = 0
 local corpse = nil
-local captured = {}
 local cleared = {}
+local abandoned = {}
 local refused = {}
+local flagged = {}
 local warned = false
 
 local function bypassHeld()
@@ -42,8 +43,8 @@ local function release()
     generation = generation + 1
     deadline = nil
     leftBehind = 0
-    captured = {}
     cleared = {}
+    abandoned = {}
 end
 
 function Loot.Bypassing()
@@ -57,10 +58,25 @@ function Loot.Refuse(itemID)
     return true
 end
 
+function Loot.Flag(itemID, ruleID)
+    local key = ruleID .. ":" .. tostring(itemID)
+    if flagged[key] then return false end
+    flagged[key] = true
+    return true
+end
+
 local function record(count)
     for slot = count, 1, -1 do
         local itemID = (Filter.SlotItem(slot))
-        if itemID then History.Record(itemID) end
+        if itemID then History.Record(itemID, Filter.SlotQuest(slot)) end
+    end
+end
+
+local function observe(count)
+    for slot = count, 1, -1 do
+        local itemID = (Filter.SlotItem(slot))
+        Filter.Verdict(itemID, slot)
+        if itemID then History.Record(itemID, Filter.SlotQuest(slot)) end
     end
 end
 
@@ -99,10 +115,19 @@ local function onLootWindow()
     if claimed and deadline and GetTime() > deadline then release() end
     if claimed then return end
     local count = Filter.SlotCount()
-    if Storage.IsEmpty() then
+
+    local source = lootSource()
+    if source == nil or source ~= corpse then
+        corpse = source
+        refused = {}
+        flagged = {}
+        warned = false
+    end
+
+    if not Storage.Refuses() then
         if not recorded then
             recorded = true
-            record(count)
+            observe(count)
         end
         return
     end
@@ -114,13 +139,6 @@ local function onLootWindow()
     generation = generation + 1
     deadline = GetTime() + STUCK_AFTER
     local token = generation
-
-    local source = lootSource()
-    if source == nil or source ~= corpse then
-        corpse = source
-        refused = {}
-        warned = false
-    end
 
     local queue = {}
     if bypassHeld() then
@@ -136,17 +154,20 @@ local function onLootWindow()
     local links, destroyed = {}, {}
     for slot = count, 1, -1 do
         local itemID, link = Filter.SlotItem(slot)
-        captured[slot] = itemID
-        if itemID and not Filter.SparesSlot(slot) and Filter.Refuses(itemID) then
-            if Destroy.Eligible(itemID) then
-                if Loot.Refuse(itemID) then destroyed[#destroyed + 1] = ns.ItemLink(itemID, link) end
-                Destroy.Queue(itemID)
-                queue[#queue + 1] = slot
-            elseif Loot.Refuse(itemID) then
+        local action, reason = Filter.Verdict(itemID, slot)
+        if action == "destroy" then
+            if Loot.Refuse(itemID) then destroyed[#destroyed + 1] = ns.ItemLink(itemID, link) end
+            Destroy.Queue(itemID)
+            queue[#queue + 1] = slot
+        elseif action == "skip" then
+            abandoned[slot] = true
+            if Loot.Refuse(itemID) then
                 links[#links + 1] = ns.ItemLink(itemID, link)
+                local rule = Storage.Rule(reason)
+                Storage.LogDecision(itemID, reason, "skip", rule and Storage.RuleLabel(rule))
             end
         else
-            if itemID then History.Record(itemID) end
+            if itemID then History.Record(itemID, Filter.SlotQuest(slot)) end
             queue[#queue + 1] = slot
         end
     end
@@ -159,8 +180,7 @@ end
 local function onSlotCleared(slot)
     if Storage.account.wrapper or warned or not draining or cleared[slot] then return end
     cleared[slot] = true
-    local itemID = captured[slot]
-    if itemID and refused[itemID] and not Destroy.Eligible(itemID) then
+    if abandoned[slot] then
         warned = true
         ns.Print(ns.L.INTERFERENCE)
     end
