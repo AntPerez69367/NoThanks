@@ -61,9 +61,9 @@ function AutoLoot.Initialise()
 end
 
 function AutoLoot.Sync()
-    if Storage.IsEmpty() then
-        AutoLoot.Release()
-    else
+    if Storage.Refuses() then
         AutoLoot.Acquire()
+    else
+        AutoLoot.Release()
     end
 end

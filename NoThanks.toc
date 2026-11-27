@@ -1,6 +1,6 @@
 ## Interface: 16001
 ## Title: No Thanks!
-## Notes: Leaves blacklisted items on the corpse, or destroys them for you.
+## Notes: Your rules leave junk on the corpse or destroy it. A blacklist handles the rest.
 ## Version: @project-version@
 ## Category: Inventory
 ## IconTexture: Interface\AddOns\NoThanks\Media\icon.tga

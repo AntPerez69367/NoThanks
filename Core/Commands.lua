@@ -1,6 +1,5 @@
 local addonName, ns = ...
 local Storage, AutoLoot, Loot, UI = ns.Storage, ns.AutoLoot, ns.Loot, ns.UI
-local Destroy = ns.Destroy
 local Button = ns.Minimap
 
 local function devCommand(argument)
@@ -36,16 +35,30 @@ SlashCmdList.NOTHANKS = function(message)
     end
 end
 
+local function warmCache()
+    for key in pairs(Storage.Blacklist()) do
+        ns.ItemInfo(tonumber(key))
+    end
+    for key in pairs(Storage.History()) do
+        ns.ItemInfo(tonumber(key))
+    end
+end
+
 local bootstrap = CreateFrame("Frame")
 bootstrap:RegisterEvent("ADDON_LOADED")
-bootstrap:SetScript("OnEvent", function(self, _, loaded)
+bootstrap:RegisterEvent("PLAYER_LOGIN")
+bootstrap:SetScript("OnEvent", function(self, event, loaded)
+    if event == "PLAYER_LOGIN" then
+        self:UnregisterEvent("PLAYER_LOGIN")
+        warmCache()
+        return
+    end
     if loaded ~= addonName then return end
     self:UnregisterEvent("ADDON_LOADED")
     Storage.Initialise()
     ns.LoadLocale()
     Button.Initialise()
     Loot.Initialise()
-    Destroy.Initialise()
     AutoLoot.Initialise()
     UI.RegisterOptions()
     ns.Resync()

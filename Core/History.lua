@@ -28,7 +28,7 @@ function History.Prune()
     end
 end
 
-function History.Record(itemID)
+function History.Record(itemID, isQuestItem)
     local key = Storage.Key(itemID)
     if not key then return end
     local store = Storage.History()
@@ -36,9 +36,10 @@ function History.Record(itemID)
     if entry then
         entry.count = (entry.count or 0) + 1
         entry.seen = time()
+        if isQuestItem then entry.quest = true end
         return
     end
-    store[key] = { count = 1, seen = time() }
+    store[key] = { count = 1, seen = time(), quest = isQuestItem or nil }
     History.Prune()
 end
 

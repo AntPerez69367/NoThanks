@@ -40,9 +40,8 @@ local function cursorItem()
     return plain(kind), tonumber(plain(itemID))
 end
 
-function Destroy.Eligible(itemID)
+function Destroy.Permits(itemID)
     if not Storage.account.destroy then return false end
-    if not itemID or not Filter.Refuses(itemID) then return false end
     if Filter.IsQuestItem(itemID) ~= false then return false end
     local _, _, quality = ns.ItemInfo(itemID)
     quality = tonumber(quality)
@@ -50,15 +49,9 @@ function Destroy.Eligible(itemID)
     return quality <= Storage.account.destroyQuality
 end
 
-function Destroy.Queue(itemID)
-    if not itemID then return end
-    local entry = pending[itemID]
-    if entry then
-        entry.count = entry.count + 1
-        entry.expires = GetTime() + WINDOW
-        return
-    end
-    pending[itemID] = { count = 1, expires = GetTime() + WINDOW }
+function Destroy.Eligible(itemID)
+    if not itemID or not Filter.Refuses(itemID) then return false end
+    return Destroy.Permits(itemID)
 end
 
 local function prune()
@@ -94,18 +87,27 @@ local function flush()
         for slot = 1, bagSlots(bag) do
             local itemID, locked = bagSlotItem(bag, slot)
             local entry = itemID and pending[itemID]
-            if entry and not locked and Destroy.Eligible(itemID) then
-                if destroySlot(bag, slot, itemID) then
-                    entry.count = entry.count - 1
-                    if entry.count <= 0 then pending[itemID] = nil end
+            if entry and not locked then
+                local action, reason = Filter.Verdict(itemID, nil, true)
+                if action == "destroy" then
+                    if destroySlot(bag, slot, itemID) then
+                        entry.count = entry.count - 1
+                        if entry.count <= 0 then pending[itemID] = nil end
+                        local rule = Storage.Rule(reason)
+                        Storage.LogDecision(itemID, reason, "destroy", rule and Storage.RuleLabel(rule))
+                    end
+                    return
                 end
-                return
             end
         end
     end
 end
 
-function Destroy.Initialise()
+local hooked = false
+
+local function hook()
+    if hooked then return end
+    hooked = true
     local frame = CreateFrame("Frame", nil, UIParent)
     frame:EnableKeyboard(true)
     frame:SetPropagateKeyboardInput(true)
@@ -113,4 +115,16 @@ function Destroy.Initialise()
     frame:SetScript("OnKeyUp", flush)
     WorldFrame:HookScript("OnMouseDown", flush)
     WorldFrame:HookScript("OnMouseUp", flush)
+end
+
+function Destroy.Queue(itemID)
+    if not itemID then return end
+    hook()
+    local entry = pending[itemID]
+    if entry then
+        entry.count = entry.count + 1
+        entry.expires = GetTime() + WINDOW
+        return
+    end
+    pending[itemID] = { count = 1, expires = GetTime() + WINDOW }
 end

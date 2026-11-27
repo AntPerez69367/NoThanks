@@ -26,6 +26,7 @@ local entries = {}
 local selected = {}
 local offset = 0
 local panel, headers, empty, track, thumb, rowWidth
+local renderRows
 local currentTab = "loot"
 local unfilteredTotal = 0
 local unresolved = false
@@ -59,7 +60,27 @@ local function countWidth(tab)
     return COUNT_WIDTH_LOOT
 end
 
-local function quickBinding(button)
+local function priceLegend(slot, title)
+    local hotspot = CreateFrame("Button", nil, headers)
+    hotspot:SetPoint("TOP", headers, "TOP", 0, 0)
+    hotspot:SetPoint("BOTTOM", headers, "BOTTOM", 0, 0)
+    hotspot:SetPoint("LEFT", slot, "LEFT", 0, 0)
+    hotspot:SetPoint("RIGHT", slot, "RIGHT", 0, 0)
+    hotspot:SetScript("OnEnter", function(self)
+        GameTooltip:SetOwner(self, "ANCHOR_TOP")
+        GameTooltip:SetText(title)
+        GameTooltip:AddLine(string.format(ns.L.LEGEND_NONE, ns.L.PRICE_NONE),
+            UI.C.muted[1], UI.C.muted[2], UI.C.muted[3], true)
+        GameTooltip:AddLine(string.format(ns.L.LEGEND_UNKNOWN, ns.L.PRICE_UNKNOWN),
+            UI.C.muted[1], UI.C.muted[2], UI.C.muted[3], true)
+        GameTooltip:Show()
+    end)
+    UI.Unhover(hotspot, function(self)
+        if GameTooltip:IsOwned(self) then GameTooltip:Hide() end
+    end)
+end
+
+function List.QuickBinding(button)
     local binding = Storage.account.quickAddBinding
     if binding == "RIGHT" then return button == "RightButton" end
     if button ~= "LeftButton" then return false end
@@ -111,12 +132,13 @@ local function createRow(slot)
 
     row:RegisterForClicks("LeftButtonUp", "RightButtonUp")
     row:SetScript("OnClick", function(self, button)
-        if quickBinding(button) then
+        if List.QuickBinding(button) then
             quickToggle(self.key)
             return
         end
         selected[self.key] = not selected[self.key] or nil
-        UI.Refresh()
+        renderRows()
+        UI.SyncBulkAction()
     end)
     row:SetScript("OnEnter", function(self)
         self.hover:Show()
@@ -125,7 +147,7 @@ local function createRow(slot)
         GameTooltip:SetHyperlink(self.link)
         GameTooltip:Show()
     end)
-    row:SetScript("OnLeave", function(self)
+    UI.Unhover(row, function(self)
         self.hover:Hide()
         if GameTooltip:IsOwned(self) then GameTooltip:Hide() end
     end)
@@ -142,7 +164,7 @@ local function updateRow(row, entry)
     local columns = row.columns
     row.key = entry.key
     row.link = entry.link
-    row.icon:SetTexture(entry.icon or "Interface\\Icons\\INV_Misc_QuestionMark")
+    row.icon:SetTexture(ns.ItemIcon(entry.itemID) or "Interface\\Icons\\INV_Misc_QuestionMark")
     columns.name:SetText(entry.name or ("item:" .. tostring(entry.key)))
     UI.Color(columns.name, entry.quality)
     columns.count:SetText(entry.count and tostring(entry.count) or "")
@@ -172,7 +194,7 @@ local function paintGutter(total, maxOffset)
     thumb:Show()
 end
 
-local function renderRows()
+function renderRows()
     local total = #entries
     local maxOffset = math.max(0, total - VISIBLE_ROWS)
     if offset > maxOffset then offset = maxOffset end
@@ -226,12 +248,12 @@ function List.Build(tab, search, qualities)
         local itemID = tonumber(key)
         if (blacklisted or inWindow(record.seen)) and listed(key, itemID, blacklisted) then
             unfilteredTotal = unfilteredTotal + 1
-            local name, link, quality, _, _, _, _, _, _, icon = ns.ItemInfo(itemID)
+            local name, link, quality = ns.ItemInfo(itemID)
             if not name then unresolved = true end
             if matches(key, name, quality, search, qualities) then
                 entries[#entries + 1] = {
                     key = key, itemID = itemID, name = name, link = link,
-                    quality = quality, icon = icon, seen = record.seen or 0,
+                    quality = quality, seen = record.seen or 0,
                     count = blacklisted and (record.skipped or 0) or record.count,
                 }
             end
@@ -261,11 +283,13 @@ function List.Counts()
 end
 
 function List.TabTotal(tab)
-    local blacklisted = (tab == "blacklist")
-    local source = blacklisted and Storage.Blacklist() or Storage.History()
     local total = 0
-    for key, record in pairs(source) do
-        if (blacklisted or inWindow(record.seen)) and listed(key, tonumber(key), blacklisted) then
+    if tab == "blacklist" then
+        for _ in pairs(Storage.Blacklist()) do total = total + 1 end
+        return total
+    end
+    for key, record in pairs(Storage.History()) do
+        if inWindow(record.seen) and listed(key, tonumber(key), false) then
             total = total + 1
         end
     end
@@ -280,10 +304,9 @@ function List.Attach(parent, metrics)
     panel:SetSize(metrics.listWidth, VISIBLE_ROWS * ROW_HEIGHT + 2)
     UI.Fill(panel, UI.C.content, 0.45)
     UI.Edge(panel, UI.C.borderDim)
-    panel:SetScript("OnShow", function(self) self:RegisterEvent("GET_ITEM_INFO_RECEIVED") end)
-    panel:SetScript("OnHide", function(self) self:UnregisterEvent("GET_ITEM_INFO_RECEIVED") end)
+    panel:RegisterEvent("GET_ITEM_INFO_RECEIVED")
     panel:SetScript("OnEvent", function()
-        if not unresolved or refreshQueued then return end
+        if not panel:IsVisible() or not unresolved or refreshQueued then return end
         refreshQueued = true
         C_Timer.After(REFRESH_DELAY, function()
             refreshQueued = false
@@ -301,9 +324,12 @@ function List.Attach(parent, metrics)
     headers:SetPoint("BOTTOMRIGHT", panel, "TOPRIGHT", -(GUTTER_SPAN + 1), metrics.columnGap)
     headers:SetHeight(metrics.columnH)
     headers.columns = columnSlots(headers, "GameFontDisableSmall", "GameFontDisableSmall")
-    headers.columns.name:SetText(ns.L.COL_ITEM)
-    headers.columns.vendor:SetText(ns.L.COL_VENDOR)
-    headers.columns.auction:SetText(ns.L.COL_AUCTION)
+    headers.columns.name:SetText(ns.L.COL_ITEM:upper())
+    headers.columns.vendor:SetText(ns.L.COL_VENDOR:upper())
+    headers.columns.auction:SetText(ns.L.COL_AUCTION:upper())
+    for _, slot in pairs(headers.columns) do UI.Ink(slot, UI.C.dim) end
+    priceLegend(headers.columns.vendor, ns.L.COL_VENDOR)
+    priceLegend(headers.columns.auction, ns.L.COL_AUCTION)
     local rule = headers:CreateTexture(nil, "ARTWORK")
     rule:SetPoint("BOTTOMLEFT", panel, "TOPLEFT", 0, 1)
     rule:SetPoint("BOTTOMRIGHT", panel, "TOPRIGHT", 0, 1)
@@ -336,7 +362,8 @@ function List.Render(tab, emptyMessage)
     for slot = 1, VISIBLE_ROWS do
         pool[slot].columns.count:SetWidth(width)
     end
-    headers.columns.count:SetText((tab == "blacklist") and ns.L.COL_LEFT or ns.L.COL_LOOTED)
+    headers.columns.count:SetText(
+        ((tab == "blacklist") and ns.L.COL_LEFT or ns.L.COL_LOOTED):upper())
     renderRows()
     if #entries == 0 then
         empty:SetText(emptyMessage)

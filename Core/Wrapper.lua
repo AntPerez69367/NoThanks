@@ -8,18 +8,20 @@ local reentrant = false
 
 local function wrapped(slot, ...)
     if reentrant or disabled or ns.Loot.Bypassing() then return original(slot, ...) end
-    local ok, refuses = pcall(Filter.RefusesSlot, slot)
-    if not ok or not refuses then return original(slot, ...) end
     local itemID, link = Filter.SlotItem(slot)
-    if itemID and Destroy.Eligible(itemID) then
+    local ok, action, reason = pcall(Filter.Verdict, itemID, slot)
+    if not ok or not action then return original(slot, ...) end
+    if action == "destroy" then
         if ns.Loot.Refuse(itemID) then
             ns.Announce(string.format(ns.L.DESTROYED, ns.ItemLink(itemID, link)))
         end
         Destroy.Queue(itemID)
         return original(slot, ...)
     end
-    if itemID and ns.Loot.Refuse(itemID) then
+    if ns.Loot.Refuse(itemID) then
         ns.Announce(string.format(ns.L.LEFT_BEHIND, ns.ItemLink(itemID, link)))
+        local rule = Storage.Rule(reason)
+        Storage.LogDecision(itemID, reason, "skip", rule and Storage.RuleLabel(rule))
     end
 end
 
@@ -51,7 +53,7 @@ function Wrapper.Remove()
 end
 
 function Wrapper.Sync()
-    if Storage.account.wrapper and not Storage.IsEmpty() then
+    if Storage.account.wrapper and Storage.Refuses() then
         Wrapper.Install()
     else
         Wrapper.Remove()
